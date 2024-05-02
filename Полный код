@@ -1,0 +1,421 @@
+#include <iostream>
+#include <cmath>
+#include <complex>
+#include <locale.h>
+#include "GnuP.h"
+
+using namespace std;
+
+const int MAX_ROOTS = 100;
+//Трансцендентное уравнения
+double f11(double x)  
+{
+    return(x * x - cos(5 * x));
+}
+double f111(double x)//Первая производная функции f11(x). 
+{
+    return(2 * x + 5 * sin(5 * x));
+}
+double f112(double x)  //Вторая производная функции f11(x). 
+{
+    return(2 + 25 * cos(5 * x));
+}
+double f11i(double x, double L)  
+{
+    return(x + L * f11(x));
+}
+
+// Функция для вычисления значения многочлена с помощью схемы Горнера
+double horner(double coefficients[], int n, double x) {
+    double result = coefficients[0]; 
+
+  
+    for (int i = 1; i < n; ++i) {
+        result = result * x + coefficients[i];
+    }
+
+    return result;
+}
+
+// Функция для деления многочлена на (x - a) и обновления его коэффициентов
+void delPolynom(double coefficients[], int& n, double a) {
+    if (horner(coefficients, n + 1, a) == 0) {
+        // Применяем схему Горнера для деления многочлена на (x - a)
+        double nextCoefficient = coefficients[0];
+        coefficients[0] = nextCoefficient; 
+        for (int i = 1; i < n; ++i) {
+            double currentCoefficient = coefficients[i]; 
+            coefficients[i] = nextCoefficient; 
+            nextCoefficient = currentCoefficient + a * nextCoefficient; // вычисляем следующий коэффициент схемы Горнера
+        }
+
+        // Уменьшаем степень многочлена
+        --n;
+    }
+}
+
+// Для метода Ньютона
+double f1(double x) {
+    return x*x*x*x-10*x*x*x+35*x*x-50*x+24;
+}
+
+// Производная аглебр. уравн.
+double proz(double x) {
+    return 4*pow(x,3)-30*pow(x,2)+70*x-50;
+}
+
+// Функция, реализующая метод Ньютона
+int newton(double st[], int numStPoints, double toch, double roots[]) {
+    int num_roots = 0;
+    for (int i = 0; i < numStPoints; ++i) {
+        double x = st[i];
+        int it = 0;
+        bool found_root = false;
+        while (fabs(f1(x)) > toch && num_roots < MAX_ROOTS) {
+            x = x - f1(x) / proz(x);
+            it++;
+        }
+        for (int j = 0; j < num_roots; ++j) {
+            if (fabs(roots[j] - x) < 1e-10) {
+                found_root = true;
+                break;
+            }
+        }
+        if (!found_root) {
+            roots[num_roots++] = x;
+            cout << "Количество итераций для начального приближения " << i + 1 << ": " << it << endl;
+        }
+    }
+    return num_roots;
+}
+
+//вычисления разделенной разности первого порядка  
+complex<double> razd(complex<double> x1, complex<double> x2, complex<double> f1, complex<double> f2) {
+    return (f2 - f1) / (x2 - x1);
+}
+
+//вычисления разделенной разности второго порядка  
+complex<double> razd2(complex<double> x0, complex<double> x1, complex<double> x2, complex<double> f0, complex<double> f1, complex<double> f2) {
+    return (razd(x1, x2, f1, f2) - razd(x0, x1, f0, f1)) / (x0 - x2);
+}
+
+//вычисления значения полинома в точке  
+complex<double> gorner(complex<double> P[], int N, complex<double> x0, int pr) {
+    complex<double> y0 = 0;
+    if (pr == 1) {
+        for (int i = 0; i < N; ++i) {
+            y0 = P[i] + x0 * y0;
+        }
+    }
+    else if (pr == 2) {
+        for (int i = 0; i < N; ++i) {
+            y0 += pow(x0, N - i - 1) * P[i];
+        }
+    }
+    return y0;
+}
+
+// функция понижения порядка полинома
+void del_gor(complex<double> P[], int N, complex<double> alfa, complex<double> B[]) {
+    B[0] = P[0];
+    for (int i = 1; i < N; ++i) {
+        B[i] = B[i - 1] * alfa + P[i];
+    }
+}
+
+// методом парабол  
+complex<double> parabol(complex<double> P[], int N, complex<double> x0, complex<double> x1, complex<double> x2) {
+    complex<double> f0 = gorner(P, N, x0, 1);
+    complex<double> f1 = gorner(P, N, x1, 1);
+    complex<double> f2 = gorner(P, N, x2, 1);
+    complex<double> x = x2;
+    complex<double> eps = 1e-10;
+    while (abs(gorner(P, N, x, 1)) > abs(eps)) {
+        complex<double> u = razd(x0, x1, f0, f1) + razd(x0, x2, f0, f2) - razd(x1, x2, f1, f2);
+        complex<double> t1 = u - sqrt(u * u - 4.0 * f0 * razd2(x0, x1, x2, f0, f1, f2));
+        complex<double> t2 = u + sqrt(u * u - 4.0 * f0 * razd2(x0, x1, x2, f0, f1, f2));
+        complex<double> t = (abs(t1) > abs(t2)) ? t1 : t2;
+        x = x0 - 2.0 * gorner(P, N, x0, 1) / t;
+        x2 = x1; x1 = x0; x0 = x;
+        f0 = gorner(P, N, x0, 1);
+        f1 = gorner(P, N, x1, 1);
+        f2 = gorner(P, N, x2, 1);
+    }
+    return x;
+}
+
+//нахождения всех корней полинома  
+void korni_polynom(complex<double> P[], int N, complex<double> x0, complex<double> x1, complex<double> x2) {
+    int t = 0;
+    cout << "Корни полинома:\n";
+    while (N > 1) {
+        complex<double> x = parabol(P, N, x0, x1, x2);
+        cout << "x = " << x << endl;
+        complex<double>* B = new complex<double>[N - 1];
+        del_gor(P, N, x, B);
+        for (int i = 0; i < N - 1; ++i) {
+            P[i] = B[i];
+        }
+        --N;
+        ++t;
+    }
+}
+
+
+
+// Функция, заданная выражением (4.4)
+double fi(double x, double L) {
+    return x + L * (x * x - cos(5 * x));
+}
+
+// Функция, реализующая метод секущих
+double secantMethod(double A, double B, double eps, int& iterations) {
+    double x0 = A;
+    double x1 = B;
+    double x_next;
+
+    iterations = 0; // инициализация счетчика итераций
+
+    do {
+        x_next = x1 - (f11(x1) * (x1 - x0)) / (f11(x1) - f11(x0)); // итерационная формула
+
+        x0 = x1;
+        x1 = x_next;
+
+        iterations++; // увеличиваем счетчик итераций
+    } while (fabs(f11(x_next)) > eps); // продолжаем итерации, пока значение функции больше заданной точности
+
+    return x_next;
+}
+
+// Функция, реализующая метод половинного деления
+int Dichotomy(double a, double b, double* c, double eps, double (*f_)(double)) {
+    int k = 0;
+    do {
+        *c = (a + b) / 2;
+        if (f_(*c) * f_(a) < 0) b = *c;
+        else a = *c;
+        k++;
+    } while (fabs(a - b) >= eps);
+    return k;
+}
+
+// Функция, реализующая метод хорд
+int Chord(double a, double b, double* c, double eps, double (*f_)(double)) {
+    int k = 0;
+    do {
+        *c = a - f_(a) / (f_(b) - f_(a)) * (b - a);
+        if (f_(*c) * f_(a) > 0) a = *c;
+        else b = *c;
+        k++;
+    } while (fabs(f_(*c)) >= eps);
+    return k;
+}
+
+// Функция, реализующая метод касательных
+int Tangent(double a, double b, double* c, double eps, double(*f_)(double), double(*f1_)(double), double(*f2_)(double)) {
+    int k = 0;
+    if (f_(a) * f2_(a) > 0) *c = a;
+    else *c = b;
+    do {
+        *c = *c - f_(*c) / f1_(*c);
+        k++;
+    } while (fabs(f_(*c)) >= eps);
+    return k;
+}
+// Функция ϕ(x), заданная по методу простой итерации
+double phi(double x, double lambda) {
+    return x + lambda * f11(x);
+}
+
+// Метод простой итерации для решения уравнения f(x) = 0
+double simple_iteration(double A, double B, double lambda, double epsilon) {
+    double x0 = (A + B) / 2; // Начальное приближение
+    double x1 = phi(x0, lambda); // Первое приближение
+    int iterations = 1; // Счетчик итераций
+
+    // Проверяем условие сходимости на всем интервале [a, b]
+    if (abs(1 + lambda * f111(A)) >= 1 || abs(1 + lambda * f111(B)) >= 1) {
+        cout << "Метод не сходится на интервале [" << A << ", " << B << "]" << endl;
+        return NAN;
+    }
+
+    // Итерационный процесс
+    while (abs(x1 - x0) >= epsilon) {
+        x0 = x1;
+        x1 = phi(x0, lambda);
+        iterations++;
+    }
+
+    cout << "Количество итераций: " << iterations << endl;
+    return x1;
+}
+
+int main() {
+    setlocale(LC_ALL, "Russian");
+
+    int choice;
+    cout << "Выберите метод решения уравнения:" << endl;
+    cout << "1. Метод Параболы" << endl;
+    cout << "2. Метод Ньютона" << endl;
+    cout << "3. Методы половинного деления, хорд, касательных, секущих и метод простой итерации " << endl;
+    cout << "Ваш выбор: ";
+    cin >> choice;
+
+    switch (choice) {
+    case 1: {
+        int size;
+        cout << "Введите степень полинома: ";
+        cin >> size;
+        ++size;
+
+        complex<double>* H = new complex<double>[size];
+        cout << "Введите коэффициенты полинома (начиная со старшего члена):" << endl;
+        for (int i = 0; i < size; ++i) {
+            cout << "Коэффициент для x^" << (size - i - 1) << ": ";
+            cin >> H[i];
+        }
+
+        complex<double> x0, x1, x2;
+        cout << "Введите начальное предположение x0: " << endl;
+        cout << "Ввод нужно ввести в формате комлексного числа (2, 1), где 1 - мнимая часть, если xотите ввести вещественное число, мнимую часть запиши = 0 " << endl;
+
+        double real, imag;
+        cin >> real >> imag;
+        x0 = complex<double>(real, imag);
+        x1 = x0 * 0.85;
+        x2 = x0 * 1.15;
+
+        korni_polynom(H, size, x0, x1, x2);
+        delete[] H;
+
+        break;
+    }
+    case 2: {
+        double minX, maxX;
+
+        cout << "Введите минимальное значение x: ";
+        cin >> minX;
+        cout << "Введите максимальное значение x: ";
+        cin >> maxX;
+
+        int numPoints = static_cast<int>((maxX - minX) / 0.1) + 1;
+
+        double* x = new double[numPoints];
+        double* y = new double[numPoints];
+
+        for (int i = 0; i < numPoints; ++i)
+        {
+            x[i] = minX + i * 0.1;
+            y[i] = f1(x[i]);
+        }
+
+        GnuP p;
+        p.plotArray(numPoints, x, y);
+        p.plot();
+
+        delete[] x;
+        delete[] y;
+        double st;
+        int pribliz;
+        cout << "Введите количество корней, которые вы ожидаете найти: ";
+        cin >> pribliz;
+
+        double stPoints[MAX_ROOTS];
+        cout << "Введите " << pribliz << " начальных приближений: ";
+        for (int i = 0; i < pribliz; ++i) {
+            cin >> stPoints[i];
+        }
+
+        double toch;
+        cout << "Введите точность: ";
+        cin >> toch;
+
+        double kor[MAX_ROOTS];
+        int num_roots = newton(stPoints, pribliz, toch, kor);
+
+        cout << "Количество найденных корней уравнения: " << num_roots << endl;
+        cout << "Корни уравнения: ";
+        for (int i = 0; i < num_roots; ++i) {
+            cout << kor[i] << " ";
+        }
+        cout << endl;
+
+        break;
+    }
+    case 3: {
+        double minX, maxX;
+
+        cout << "Введите минимальное значение x: ";
+        cin >> minX;
+        cout << "Введите максимальное значение x: ";
+        cin >> maxX;
+
+        int numPoints = static_cast<int>((maxX - minX) / 0.1) + 1;
+
+        double* x = new double[numPoints];
+        double* y = new double[numPoints];
+
+        for (int i = 0; i < numPoints; ++i)
+        {
+            x[i] = minX + i * 0.1;
+            y[i] = f11(x[i]);
+        }
+
+        GnuP p;
+        p.plotArray(numPoints, x, y);
+        p.plot();
+
+        delete[] x;
+        delete[] y;
+        double A, B, X, P;
+        double ep = 0.001;  //Точность вычислений. 
+        int K;
+        cout << "уравнение x * x - cos(5 * x)" << endl;
+        cout << "Введите начало отрезка\n";
+        cout << "a="; cin >> A;  //Интервал изоляции корня. 
+        cout << "Введите конец отрезка\n";
+        cout << "b="; cin >> B;
+        cout << "Решение уравнения x^2-cos(5*x)=0." << endl;
+        cout << "Метод половинного деления:" << endl;
+        K = Dichotomy(A, B, &X, ep, f11);
+        cout << "Решение  уравнения  x=" << X;
+        cout << ", количество итераций k=" << K << endl;
+        cout << "Метод  хорд:" << endl;
+        K = Chord(A, B, &X, ep, f11);
+        cout << "Решение  уравнения  x=" << X;
+        cout << ", количество итераций k=" << K << endl;
+        cout << "Метод  касательных:" << endl;
+        K = Tangent(A, B, &X, ep, f11, f111, f112);
+        cout << "Решение  уравнения  x=" << X;
+        cout << ", количество итераций k=" << K << endl;
+        cout << "Метод секущих:" << endl;
+        int iter;
+        double root = secantMethod(A, B, 0.0001, iter); // находим корень с точностью до 0.0001
+        cout << "Решение уравнения x=" << root;
+        cout << " ,количество итераций k= " << iter << endl;
+        cout << "Метод простой итерации:" << endl;
+        double lambda; 
+        double epsilon;
+
+        cout << "Введите значение параметра lambda: ";
+        cin >> lambda;
+        cout << "Введите значение точности epsilon: ";
+        cin >> epsilon;
+
+        double roots = simple_iteration(A, B, lambda, epsilon);
+        if (!isnan(roots)) {
+            cout << "Корень уравнения: " << roots << endl;
+        }
+        else {
+            cout << "Не удалось найти корень на указанном интервале." << endl;
+        }
+        break;
+    }
+    default:
+        cout << "Ошибка: неверный выбор метода." << endl;
+        break;
+    }
+
+    return 0;
+}
